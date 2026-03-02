@@ -141,12 +141,16 @@ class AntennaTestApp:
 
     def stop_test(self):
         self.stop_event.set()
+        if self.timer_id:
+            self.root.after_cancel(self.timer_id)
+            self.timer_id = None
+        self.timer_label.config(text="")
         self._set_status("Stopping ...", "orange")
 
     # ── timer ─────────────────────────────────────────────────────
 
     def _tick_timer(self):
-        if self.test_start_time is None:
+        if self.test_start_time is None or self.stop_event.is_set():
             return
         elapsed = time.monotonic() - self.test_start_time
         remaining = max(0.0, self.params.test_duration_s - elapsed)
@@ -256,16 +260,26 @@ class AntennaTestApp:
         )
 
     def _maybe_done(self):
-        if not self._is_running():
-            self.root.after(0, self._on_done)
+        self.root.after(100, self._check_threads_done)
+
+    def _check_threads_done(self):
+        if self._is_running():
+            self.root.after(100, self._check_threads_done)
+            return
+        self._on_done()
 
     def _on_done(self):
+        if str(self.test_btn.cget("state")) == "normal":
+            return
         self.test_btn.config(state=tk.NORMAL)
         self.stop_btn.config(state=tk.DISABLED)
         self.test_start_time = None
         if self.timer_id:
             self.root.after_cancel(self.timer_id)
             self.timer_id = None
+        self.timer_label.config(text="")
+        if self.status_label.cget("text") == "Stopping ...":
+            self.status_label.config(text="Stopped", fg="#F57C00")
 
     def _set_status(self, text, color="black"):
         self.root.after(0, lambda: self.status_label.config(text=text, fg=color))
